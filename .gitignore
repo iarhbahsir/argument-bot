@@ -104,3 +104,4 @@ venv.bak/
 .mypy_cache/
 
 iac_v1*
+data/

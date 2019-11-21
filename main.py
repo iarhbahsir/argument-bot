@@ -24,6 +24,9 @@ import pickle
 id_to_text = {}
 parent_to_child_ids = []
 my_data_dir = "./data/"
+my_data_dir_full = os.path.join(os.getcwd(), my_data_dir)
+if not os.path.isdir(my_data_dir_full):
+    os.mkdir(my_data_dir_full)
 build_pairs = True
 
 if build_pairs:

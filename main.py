@@ -191,7 +191,7 @@ import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 cpu_device = torch.device('cpu')
-train_set_iterator, test_set_iterator = torchtext.data.BucketIterator.splits((train_set, test_set), batch_size=64, device=device, shuffle=True, sort_key=lambda pair: len(pair.parent_post))
+train_set_iterator, test_set_iterator = torchtext.data.BucketIterator.splits((train_set, test_set), batch_size=32, device=device, shuffle=True, sort_key=lambda pair: len(pair.parent_post))
 
 
 # # 3. Create the seq2seq model
@@ -289,7 +289,7 @@ loss_function = torch.nn.CrossEntropyLoss(ignore_index=padding_index)
 
 
 max_clip = 1
-def train(seq2seq_net, train_set_iterator, optimizer, loss_function, max_clip):
+def train(seq2seq_net, train_set_iterator, optimizer, loss_function, max_clip, writer, epoch_num):
     seq2seq_net.train()
     total_loss = 0
     for i, batch in enumerate(train_set_iterator):
@@ -306,10 +306,13 @@ def train(seq2seq_net, train_set_iterator, optimizer, loss_function, max_clip):
         torch.nn.utils.clip_grad_norm_(seq2seq_net.parameters(), max_clip)
         optimizer.step()
         total_loss += loss.item()
+        
+        if i % (len(train_set_iterator) // 10) == 0:
+            writer.add_scalar('Loss/train', loss.detach().to(cpu_device).numpy().squeeze(), epoch_num*len(train_set_iterator)+i)
     
     return total_loss/len(train_set_iterator)
 
-def test(seq2seq_net, test_set_iterator, loss_function):
+def test(seq2seq_net, test_set_iterator, loss_function, writer, epoch_num):
     seq2seq_net.eval()
     total_loss = 0
     for i, batch in enumerate(test_set_iterator):
@@ -323,11 +326,18 @@ def test(seq2seq_net, test_set_iterator, loss_function):
         loss = loss_function(response, child_post)
         total_loss += loss.item()
         
+        if i % (len(test_set_iterator) // 10) == 0:
+            writer.add_scalar('Loss/test', loss.detach().to(cpu_device).numpy().squeeze(), epoch_num*len(test_set_iterator)+i)
+    
     return total_loss/len(test_set_iterator)
 
 
 # In[ ]:
 
+
+models_directory = os.path.join(os.getcwd(), my_data_dir, 'models/')
+if not os.path.isdir(models_directory):
+    os.mkdir(models_directory)
 
 run_name = "v0-testing"
 run_models_directory = os.path.join(os.getcwd(), my_data_dir, 'models/{}'.format(run_name))
@@ -356,12 +366,12 @@ for epoch in range(num_epochs):
     print("Starting epoch {}...".format(epoch))
     
     epoch_start_time = time.time()
-    loss_train = train(seq2seq_net, train_set_iterator, optimizer, loss_function, max_clip)
-    loss_test = test(seq2seq_net, test_set_iterator, loss_function)
+    loss_train = train(seq2seq_net, train_set_iterator, optimizer, loss_function, max_clip, writer, epoch)
+    loss_test = test(seq2seq_net, test_set_iterator, loss_function, writer, epoch)
     loss_train_scalar = loss_train.detach().to(cpu_device).numpy().squeeze()
     loss_test_scalar = loss_test.detach().to(cpu_device).numpy().squeeze()
-    writer.add_scalar('Loss/train', loss_train_scalar, epoch)
-    writer.add_scalar('Loss/test', loss_test_scalar, epoch)
+    writer.add_scalar('EpochLoss/train', loss_train_scalar, epoch)
+    writer.add_scalar('EpochLoss/test', loss_test_scalar, epoch)
     
     print("Epoch training duration: {}".format(time.time()-epoch_start_time))
     print("Updating models...")
